@@ -5,10 +5,12 @@ module.exports = function DCSDataRetriever(dataCallback) {
 
     var dgram = require('dgram');
     var server = dgram.createSocket('udp4');
+    let buffer;
 
     server.on('listening', function () {
         var address = server.address();
         console.log('UDP Server listening on ' + address.address + ":" + address.port);
+        let buffer = "";
     });
 
     server.on('data', (data) => {
