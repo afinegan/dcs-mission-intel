@@ -4,6 +4,8 @@ app.use('/', express.static(__dirname + '/public')); // ← adjust
 //app.listen(8080);
 app.listen(8080);
 
+app.use('/scripts', express.static(__dirname + '/node_modules'));
+
 MissionIntelApp = {};
 require('./public/js/comm.js');
 require('./public/js/marker.js');

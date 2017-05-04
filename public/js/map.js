@@ -1,4 +1,3 @@
-/* global MissionIntelApp */
 MissionIntelApp.Map = function (app) {
 
     /* GLOBAL FUNCTIONS */
@@ -96,11 +95,11 @@ MissionIntelApp.Map = function (app) {
             var mySymbol = new ms.symbol(
                     f.getProperties().SIDC, {
                 size: (f.getProperties().size * ratio),
-                altitudeDepth: 'FL' + f.getProperties().alt,
-                direction: f.getProperties().hdg,
-                speed: Math.round(f.getProperties().speed) + ' kt',
+                //altitudeDepth: 'FL' + f.getProperties().alt,
+                //direction: f.getProperties().hdg,
+                //speed: Math.round(f.getProperties().speed) + ' kt',
                 type: f.getProperties().type,
-                uniqueDesignation: 'TR' + f.getProperties().name,
+                //uniqueDesignation: 'TR' + f.getProperties().name,
                 monoColor: f.getProperties().monoColor
                         // infoColor: 'white'
             }
@@ -398,7 +397,7 @@ MissionIntelApp.Map = function (app) {
     });
 
     map.addLayer(mapLayer);
-    //map.addLayer(vectorLayer);        // JSON VECTOR DRAWINGS
+    // map.addLayer(vectorLayer);        // JSON VECTOR DRAWINGS
     map.addLayer(drawLayer);
     map.addLayer(_group);
     map.addLayer(streamLayer);
