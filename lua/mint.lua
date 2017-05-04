@@ -1,7 +1,7 @@
 do
   --
   local PORT = 3001
-  local DATA_TIMEOUT_SEC = 3
+  local DATA_TIMEOUT_SEC = 1
 
   package.path = package.path..";.\\LuaSocket\\?.lua"
   package.cpath = package.cpath..";.\\LuaSocket\\?.dll"
@@ -49,7 +49,7 @@ do
         local group = groups[groupIndex]
         local units = group:getUnits()
         for unitIndex = 1, #units do
-          if Unit.isExist(units[unitIndex]) then
+          if Unit.isExist(units[unitIndex]) and Unit.isActive(units[unitIndex]) then
             if addComma then
               msg = msg .. ","
             else
@@ -72,52 +72,79 @@ do
     return msg
   end
 
-  log("Starting DCS unit data server")
+  local JSON = loadfile("Scripts\\JSON.lua")()
+  _M = {}
+  _M.connections = {}
 
-  local tcp = socket.tcp()
-  local bound, error = tcp:bind('*', PORT)
-  if not bound then
-    log("Could not bind: " .. error)
-    return
+  _M.LuaSocketConnection = {
+    conn = nil,
+    rxbuf = ""
+  }
+
+  local function shallowCopy(source, dest)
+    dest = dest or {}
+    for k, v in pairs(source) do
+      dest[k] = v
+    end
+    return dest
   end
-  log("Port " .. PORT .. " bound")
 
-  local serverStarted, error = tcp:listen(1)
-  if not serverStarted then
-    log("Could not start server: " .. error)
-    return
+  function _M.LuaSocketConnection:create(args)
+    args = args or {}
+    local self = shallowCopy(_M.LuaSocketConnection)
+    return self
   end
-  log("Server started")
+  function _M.LuaSocketConnection:close()
+    self.conn:close()
+  end
 
-  local client
+  _M.UDPSender = {}
+  function _M.UDPSender:create(args)
+    args = args or {}
+    local self = _M.LuaSocketConnection:create()
+    shallowCopy(_M.UDPSender, self)
+    self.port = args.port or 3001
+    self.host = args.host or "127.0.0.1"
+    return self
+  end
+  function _M.UDPSender:init()
+    self.conn = socket.udp()
+    self.conn:settimeout(0)
+  end
+  function _M.UDPSender:send(msg)
+    env.info('send mesg: '..msg..' to host: '..self.host..' to port '..self.port)
+    socket.try(self.conn:sendto(msg, self.host, self.port))
+  end
+
+  function _M.init()
+    _M.connections = {
+      _M.UDPSender:create()
+    }
+    for _, c in pairs(_M.connections) do
+      c:init()
+    end
+  end
+
+  function _M.sendMessage(msg)
+    msgstr = JSON:encode(msg):gsub("\n", "") .. "\n"
+    for _, c in pairs(_M.connections) do
+      if c.send then c:send(msgstr) end
+    end
+  end
+
+
   local function step()
-
-    if not client then
-      tcp:settimeout(0.001)
-      client = tcp:accept()
-
-      if client then
-        tcp:settimeout(0)
-        log("Connection established")
-      end
-    end
-
-    if client then
-      local msg = getDataMessage()
-      local bytes, status, lastbyte = client:send(msg)
-      if not bytes then
-        log("Connection lost")
-        client = nil
-      end
-    end
+    _M.sendMessage(getDataMessage())
   end
 
   timer.scheduleFunction(function(arg, time)
     local success, error = pcall(step)
     if not success then
-      log("Error: " .. error)
+        log("Error: " .. error)
     end
     return timer.getTime() + DATA_TIMEOUT_SEC
   end, nil, timer.getTime() + DATA_TIMEOUT_SEC)
+
+  _M.init()
 
 end

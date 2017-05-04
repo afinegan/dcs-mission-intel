@@ -1,7 +1,7 @@
 module.exports = function DCSDataRetriever(dataCallback) {
 
     var PORT = 3001;
-    var HOST = '192.168.44.65';
+    var HOST = '127.0.0.1';
 
     var dgram = require('dgram');
     var server = dgram.createSocket('udp4');
