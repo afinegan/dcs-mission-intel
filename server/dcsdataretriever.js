@@ -1,41 +1,20 @@
 module.exports = function DCSDataRetriever(dataCallback) {
 
-    const PORT = 3001;
-    const ADDRESS = "127.0.0.1";
-    //const ADDRESS = "89.11.174.88";
-    //const ADDRESS = "51.175.54.160";
-    //const PORT = 10308;
+    var PORT = 3001;
+    var HOST = '0.0.0.0';
 
-    const net = require('net');
-    let buffer;
+    var dgram = require('dgram');
+    var server = dgram.createSocket('udp4');
 
-    function connect() {
+    server.on('listening', function () {
+        var address = server.address();
+        console.log('UDP Server listening on ' + address.address + ":" + address.port);
+    });
 
-        const client = net.createConnection({host: ADDRESS, port: PORT}, () => {
-            let time = new Date();
-            console.log(time.getHours() + ':' + time.getMinutes() + ':' + time.getSeconds() + ' :: Connected to DCS server!');
-            //console.log("Connected");
-            buffer = "";
-        });
+    server.on('message', function (message, remote) {
+        console.log(remote.address + ':' + remote.port +' - ' + message);
 
-        client.on('data', (data) => {
-            buffer += data;
-            while ((i = buffer.indexOf("\n")) >= 0) {
-                let data = JSON.parse(buffer.substring(0, i));
-                dataCallback(data);
-                buffer = buffer.substring(i + 1);
-            }
-        });
+    });
 
-        client.on('close', () => {
-            time = new Date();
-            console.log(time.getHours() + ':' + time.getMinutes() + ':' + time.getSeconds() + ' :: Disconnected from DCS server!');
-        });
-
-        client.on('error', () => {
-            connect();
-        });
-    }
-
-    connect();
+    server.bind(PORT, HOST);
 };
