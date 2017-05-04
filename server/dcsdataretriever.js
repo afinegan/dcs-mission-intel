@@ -12,13 +12,17 @@ module.exports = function DCSDataRetriever(dataCallback) {
     });
 
     server.on('data', (data) => {
-        console.log(remote.address + ':' + remote.port +' - ' + message);
         buffer += data;
         while ((i = buffer.indexOf("\n")) >= 0) {
             let data = JSON.parse(buffer.substring(0, i));
             dataCallback(data);
             buffer = buffer.substring(i + 1);
         }
+    });
+
+    server.on('message', function (message, remote) {
+        console.log(remote.address + ':' + remote.port +' - ' + message);
+
     });
 
     server.bind(PORT, HOST);
