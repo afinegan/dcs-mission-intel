@@ -15,7 +15,7 @@ do
   end
 
   local function getDataMessage()
-    local msg = "{"
+
 
     local function addUnit(unit)
       local unitPosition = unit:getPosition()
@@ -31,8 +31,19 @@ do
       local velocity = unit:getVelocity()
       local speed = math.sqrt(velocity.x^2 + velocity.z^2)
 
+      local PlayerName = unit:getPlayerName()
+
+
+      local msg = "{"
+      if unit:getCoalition() == 1 then
+        msg = msg .. "\"blue\":[],\"red\":["
+      end
+      if unit:getCoalition() == 2 then
+        msg = msg .. "\"red\":[],\"blue\":["
+      end
       msg = msg .. "[";
-      msg = msg .. "\"" .. unit:getTypeName() .. "\""
+      msg = msg .. tonumber(unit:getID())
+      msg = msg .. ",\"" .. unit:getTypeName() .. "\""
       msg = msg .. "," .. lat
       msg = msg .. "," .. lon
       msg = msg .. "," .. alt
@@ -40,7 +51,15 @@ do
       msg = msg .. "," .. speed
       msg = msg .. ",\"" .. unit:getCallsign() .. "\""
       msg = msg .. "," .. unit:getCoalition()
+      if PlayerName ~= nil then
+        msg = msg .. ",\"" .. PlayerName .. "\""
+      else
+        msg = msg .. ",\"\""
+      end
+
       msg = msg .. "]";
+      msg = msg .. "]}\n"
+      _M.sendMessage(msg)
     end
 
     local function addGroups(groups)
@@ -50,26 +69,19 @@ do
         local units = group:getUnits()
         for unitIndex = 1, #units do
           if Unit.isExist(units[unitIndex]) and Unit.isActive(units[unitIndex]) then
-            if addComma then
-              msg = msg .. ","
-            else
-              addComma = true
-            end
             addUnit(units[unitIndex])
           end
         end
       end
     end
 
-    msg = msg .. "\"red\":["
+
     local redGroups = coalition.getGroups(coalition.side.RED)
     addGroups(redGroups)
-    msg = msg .. "],\"blue\":["
+
     local blueGroups = coalition.getGroups(coalition.side.BLUE)
     addGroups(blueGroups)
-    msg = msg .. "]}\n"
 
-    return msg
   end
 
   local JSON = loadfile("Scripts\\JSON.lua")()
@@ -112,7 +124,7 @@ do
     self.conn:settimeout(0)
   end
   function _M.UDPSender:send(msg)
-    env.info('send mesg: '..msg..' to host: '..self.host..' to port '..self.port)
+    --env.info('send mesg: '..msg..' to host: '..self.host..' to port '..self.port)
     socket.try(self.conn:sendto(msg, self.host, self.port))
   end
 
@@ -134,7 +146,7 @@ do
 
 
   local function step()
-    _M.sendMessage(getDataMessage())
+   getDataMessage()
   end
 
   timer.scheduleFunction(function(arg, time)

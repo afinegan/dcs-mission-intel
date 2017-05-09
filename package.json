@@ -17,6 +17,7 @@
     "express": "^4.15.2",
     "geojson": "^0.4.1",
     "grunt": "^1.0.1",
+    "lodash": "^4.17.4",
     "milsymbol": "^1.1.0",
     "nodejs-websocket": "^1.7.1"
   },

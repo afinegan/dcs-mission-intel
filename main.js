@@ -1,7 +1,9 @@
 ﻿var express = require('express');
+var _ = require('lodash');
+var GeoJSON = require('geojson');
+
 var app = express();
-app.use('/', express.static(__dirname + '/public')); // ← adjust
-//app.listen(8080);
+app.use('/', express.static(__dirname + '/public'));
 app.listen(8080);
 
 app.use('/scripts', express.static(__dirname + '/node_modules'));
@@ -14,7 +16,9 @@ require('./public/js/marker-fids.js');
 var Utility = require('./public/js/utility.js');
 var SIDCtable = require('./public/js/sidc.js');
 
-var GeoJSON = require('geojson');
+var serverObject = {};
+_.set(serverObject, 'units', []);
+_.set(serverObject, 'requestArray', []);
 
 var wsConnections = [];
 
@@ -32,59 +36,48 @@ var server = websocket.createServer(function (conn) {
     });
 });
 
+
+
 console.log(':: SERVER IS RUNNING!');
 
-class Unit {
-
-    static parse(data) {
-        let track = new Date();
-        track = 'TR' + ("0" + track.getMinutes()).slice(-2) + ("0" + track.getMilliseconds()).slice(-2);
-
-        let unit = new Unit();
-        unit.type = data[0];
-        unit.x = data[1];
-        unit.y = data[2];
-        unit.z = data[3];
-        unit.hdg = data[4];
-        unit.speed = data[5];
-        unit.callsign = data[6];
-        unit.coalition = data[7];
-        unit.name = track;
-        return unit;
-    }
-
-    static sidc(type) {
+_.set(serverObject, 'unitParse', function (unit) {
+    if (_.get(unit, 'action') == 'C') {
+        serverObject.units[unit.unitID] = {
+            unitID: _.get(unit, 'unitID'),
+            type: _.get(unit, 'type'),
+            coalition: _.get(unit, 'coalition'),
+            lat: _.get(unit, 'lat'),
+            lon: _.get(unit, 'lon'),
+            playername: _.get(unit, 'playername', '')
+        };
 
     }
-
-    constructor() {
-        this.type = "";
-        this.x = 0;
-        this.y = 0;
-        this.z = 0;
-        this.hdg = 0;
-        this.speed = 0;
-        this.callsign = "";
-        this.coalition = 0;
-        this.name = "";
-        this.sidc = "";
+    if (_.get(unit, 'action') == 'U') {
+        if (_.get(serverObject.units[unit.unitID], 'lat', null) !== null && _.get(serverObject.units[unit.unitID], 'lon', null) !== null) {
+            _.set(serverObject.units[unit.unitID], 'lat', _.get(unit, 'lat'));
+            _.set(serverObject.units[unit.unitID], 'lon', _.get(unit, 'lon'));
+        }
     }
-}
+    if (_.get(unit, 'action') == 'D') {
+        delete serverObject.units[unit.unitID];
+    }
+    return true;
+});
 
 function toGeoJSON(dcsData) {
 
-    // console.log(dcsData);
-    // console.log("############################");
-    // return;
+     console.log(dcsData);
+     console.log("############################");
+     //return;
 
     let featureCollection = [];
-    let _all = dcsData.blue.concat(dcsData.red);
 
+    dcsData.units.forEach(function (unit) {
+        serverObject.unitParse(unit);
+    });
 
-
-    _all.forEach(function (el) {
-        let unit = Unit.parse(el);
-
+    console.log('DCS unit count: '+dcsData.unitCount+' serverObj units: '+serverObject.units.length);
+    serverObject.units.forEach(function (unit) {
         // DEFAULT MARKER
         let side = '0';
         let markerColor = 'rgb(252, 246, 127)';
@@ -111,18 +104,13 @@ function toGeoJSON(dcsData) {
 
         // OPTION: [COMMENT TO TURN OFF] SHOW AFFILIATION
         if (unit.coalition == 1) {
-            side = '1';
             markerColor = 'rgb(255, 88, 88)';
             _sidcObject["affiliation"] = 'H';
         }
         if (unit.coalition == 2) {
-            side = '2';
             markerColor = 'rgb(128, 224, 255)';
             _sidcObject["affiliation"] = 'F';
         }
-
-        // OPTION: [COMMENT TO TURN OFF] HIDE UNIT TYPE/FUNCTION
-        //_sidcObject["functionID"] = '-----';
 
         // Generate final SIDC string
         let _sidc = "";
@@ -132,18 +120,15 @@ function toGeoJSON(dcsData) {
 
         // Add unit to the feature collection
         featureCollection.push({
-            lat: unit.x,
-            lon: unit.y,
-            alt: Utility.metersToFL(unit.z),
-            hdg: unit.hdg,
-            speed: unit.speed,
+            lat: _.get(unit, 'lat'),
+            lon: _.get(unit, 'lon'),
             monoColor: markerColor,
             SIDC: _sidc + '***',
-            side: side,
+            side: _.get(unit, 'coalition'),
             size: 30,
             source: 'awacs',
-            type: unit.type,
-            name: Utility.trackNum(unit.callsign)
+            type: _.get(unit, 'type'),
+            name: _.get(unit, 'playername', '')
         });
     });
 
@@ -153,12 +138,73 @@ function toGeoJSON(dcsData) {
 }
 
 function receiveDCSData(dcsData) {
-
     let geoJSONData = toGeoJSON(dcsData);
     for (let connection in wsConnections)
         wsConnections[connection].sendText(JSON.stringify(geoJSONData));
 }
 
 server.listen(8081);
-var dcsdr = require('./server/dcsdataretriever.js');
-dcsdr(receiveDCSData);
+//var dcsdr = require('./server/dcsdataretriever.js');
+//dcsdr(receiveDCSData);
+var sendCMD = 'SENDTHISCOMMAND';
+function DCSDataRetriever(dataCallback) {
+
+    const PORT = 3001;
+    const ADDRESS = "127.0.0.1";
+    var connOpen = true;
+    //const ADDRESS = "89.11.174.88";
+    //const ADDRESS = "51.175.54.160";
+    //const PORT = 10308;
+
+    const net = require('net');
+    let buffer;
+
+    function connect() {
+
+        //gather request from request array
+        var request = _.get(serverObject, 'requestArray[0]',"none")+"\r\n";
+
+        const client = net.createConnection({host: ADDRESS, port: PORT}, () => {
+            let time = new Date();
+            console.log(time.getHours() + ':' + time.getMinutes() + ':' + time.getSeconds() + ' :: Connected to DCS server!');
+            connOpen = false;
+            buffer = "";
+        });
+
+        client.on('connect', function() {
+            client.write("INIT"+"\n");
+        });
+
+        client.on('data', (data) => {
+            buffer += data;
+            while ((i = buffer.indexOf("\n")) >= 0) {
+                let data = JSON.parse(buffer.substring(0, i));
+                dataCallback(data);
+                buffer = buffer.substring(i + 1);
+                client.write("NONE"+"\n");
+                _.get(serverObject, 'requestArray').shift();
+            }
+        });
+
+        client.on('close', () => {
+            time = new Date();
+            console.log(time.getHours() + ':' + time.getMinutes() + ':' + time.getSeconds() + ' :: Reconnecting....');
+            connOpen = true;
+        });
+
+        client.on('error', () => {
+            console.log('error!');
+            connOpen = true;
+        });
+    }
+
+    setInterval(function(){
+        if (connOpen === true) {
+            connect();
+        }
+    }, 1 * 200);
+
+};
+
+DCSDataRetriever(receiveDCSData);
+//dcsdr(receiveDCSData);
